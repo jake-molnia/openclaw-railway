@@ -58,7 +58,17 @@ export function createProxy(getToken) {
   const upgradeHandler = (req, socket, head) => {
     const controlUiBasePath = '/openclaw';
 
-    if (req.url.startsWith(controlUiBasePath + '/') || req.url === controlUiBasePath) {
+    // Detect SPA vs CLI WebSocket connections.
+    // v2026.3.13+ changed the SPA to connect its WebSocket to the root path ("/")
+    // instead of under /openclaw, so path-based detection alone is insufficient.
+    // Browser SPA sends Origin: https://<public-domain>; CLI sends localhost or no Origin.
+    // NOTE: Origin is read BEFORE the rewrite to loopback on line below.
+    const origin = req.headers['origin'] || '';
+    const publicDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
+    const isSpaOrigin = publicDomain && origin.includes(publicDomain);
+    const isControlUiPath = req.url.startsWith(controlUiBasePath + '/') || req.url === controlUiBasePath;
+
+    if (isSpaOrigin || isControlUiPath) {
       // Dashboard/Control UI WebSocket: inject token so shared auth is present.
       // OpenClaw bug #29801: dangerouslyDisableDeviceAuth only works when shared
       // authentication is already being transmitted. Without the token, the gateway
@@ -93,7 +103,7 @@ export function createProxy(getToken) {
     for (const h of proxyHeaders) {
       delete req.headers[h];
     }
-    console.log(`[proxy] WebSocket upgrade: ${req.url}`);
+    console.log(`[proxy] WebSocket upgrade: ${req.url} (spa=${isSpaOrigin || isControlUiPath}, origin=${origin || 'none'})`);
     proxy.ws(req, socket, head);
   };
 
