@@ -6,6 +6,39 @@ Deploy [OpenClaw](https://github.com/openclaw/openclaw), a personal AI assistant
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow)
 
+## About This Fork
+
+This is Jake's fork of [`protemplate/openclaw-railway`](https://github.com/protemplate/openclaw-railway). It keeps the upstream wrapper/dashboard/onboard flow and the `/data` persistence model intact, and adds a richer baked-in operator tooling baseline so the assistant and shell users can do more without ad-hoc package installs at runtime.
+
+### Pre-installed operator tooling
+
+System packages (installed via apt in the runtime stage):
+
+- Networking / debugging: `openssh-client`, `iputils-ping` (`ping`), `netcat-openbsd` (`nc`), `dnsutils` (`dig`, `nslookup`), `rsync`, `curl`, `wget`
+- Files / search / archives: `jq`, `ripgrep` (`rg`), `fd-find` (exposed as `fd`), `zip`, `unzip`, `less`, `tmux`
+- Process inspection: `procps` (`ps`, `top`, etc.)
+- Build toolchain (also needed for in-app upgrades): `git`, `python3`, `make`, `g++`
+
+Extra CLIs:
+
+- `gh` — GitHub CLI (installed from the official apt repo)
+- `railway` — Railway CLI (installed as a static binary from GitHub releases)
+
+All of the above are available in the final runtime image — no `docker exec` bootstrap step required.
+
+### What persists across rebuilds
+
+Anything under the Railway volume mounted at `/data` survives rebuilds and restarts, including:
+
+- `/data/.openclaw/` — OpenClaw state, config, sessions, memory, gateway token
+- `/data/workspace/` — file storage
+- `/data/.npm-global/` — npm prefix used for in-app OpenClaw upgrades
+- `/data/.local/`, `/data/.npm/` — symlinked in as `$HOME/.local` and `$HOME/.npm`
+
+### What does not persist
+
+Image-baked tooling (all the packages above, plus Node, OpenClaw, optional Playwright/Chromium and signal-cli) lives inside the container image. It is refreshed on every rebuild and is not stored on the volume. If you detach the volume, `/data` state is lost; the tooling is not.
+
 ## Features
 
 ### Deployment

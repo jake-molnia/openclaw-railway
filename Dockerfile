@@ -33,20 +33,58 @@ ARG INSTALL_SIGNAL_CLI=false
 ARG INSTALL_BROWSER=true
 ARG SIGNAL_CLI_VERSION=0.13.24
 
-# Install base runtime dependencies
+# Install base runtime dependencies + operator tooling baked into the image.
+# Base runtime:
 # - tini: proper PID 1 handling for signal forwarding
-# - curl: health checks
-# - ca-certificates: HTTPS requests
+# - curl, wget, ca-certificates: HTTP(S) fetches and health checks
 # - git, python3, make, g++: required for npm install -g (in-app upgrades)
+# Operator tooling (debugging, SSH, net, files, archives, process inspection):
+# - openssh-client, iputils-ping, netcat-openbsd, dnsutils, rsync
+# - jq, ripgrep, fd-find (exposed as `fd`), tmux, zip, unzip, less, procps
+# - gnupg + apt-transport-https: required to add the GitHub CLI apt source
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tini \
     curl \
+    wget \
     ca-certificates \
     git \
     python3 \
     make \
     g++ \
+    openssh-client \
+    iputils-ping \
+    netcat-openbsd \
+    dnsutils \
+    rsync \
+    jq \
+    ripgrep \
+    fd-find \
+    tmux \
+    zip \
+    unzip \
+    less \
+    procps \
+    gnupg \
+    apt-transport-https \
+    && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
+
+# Install GitHub CLI (gh) from the official apt repo
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+       | gpg --dearmor -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+       > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Railway CLI globally via npm so the `railway` command is on PATH.
+# Done BEFORE NPM_CONFIG_PREFIX is flipped to /data, so the install lands in
+# /usr/local and is baked into the image.
+RUN npm install -g @railway/cli \
+    && railway --version
 
 # Install OpenClaw from npm (pre-built, ~30-60s instead of ~12min source build)
 # Install to default /usr/local prefix BEFORE setting NPM_CONFIG_PREFIX to /data
