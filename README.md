@@ -22,9 +22,20 @@ System packages (installed via apt in the runtime stage):
 Extra CLIs:
 
 - `gh` — GitHub CLI (installed from the official apt repo)
-- `railway` — Railway CLI (installed as a static binary from GitHub releases)
+- `railway` — Railway CLI (installed via `npm i -g @railway/cli`)
+- `uv` / `uvx` — Astral's Python manager (copied from `ghcr.io/astral-sh/uv:latest`)
 
 All of the above are available in the final runtime image — no `docker exec` bootstrap step required.
+
+### Python is managed by `uv`
+
+This image does **not** install `python3` via apt. Every Python operation — including the interpreter that `node-gyp` uses when `npm install` compiles native modules — goes through `uv`:
+
+- `uv` installs a managed CPython (3.12) under `/opt/uv-python` (`UV_PYTHON_INSTALL_DIR`).
+- `/usr/local/bin/python3` and `/usr/local/bin/python` are symlinks pointing at that managed interpreter, so tools looking for `python3` on `PATH` still work.
+- `UV_PYTHON_PREFERENCE=only-managed` tells `uv` to ignore any system Python and only use interpreters it owns.
+
+If you need a Python package or tool in this container, reach for `uv add`, `uv pip install`, or `uvx <tool>` rather than `pip` / `python -m pip`.
 
 ### What persists across rebuilds
 

@@ -6,12 +6,22 @@
 # ==============================================================================
 FROM node:24-bookworm-slim AS wrapper-builder
 
-# Install build dependencies for node-pty
+# Install native build deps for node-pty. Python is provided by uv (not apt) —
+# we use uv for every Python operation in this image, including feeding
+# node-gyp a Python interpreter via a symlink on PATH.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
     make \
     g++ \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && UV_PYTHON_INSTALL_DIR=/opt/uv-python uv python install 3.12 \
+    && ln -sf "$(UV_PYTHON_INSTALL_DIR=/opt/uv-python uv python find 3.12)" /usr/local/bin/python3 \
+    && ln -sf /usr/local/bin/python3 /usr/local/bin/python
+
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python \
+    UV_PYTHON_PREFERENCE=only-managed
 
 WORKDIR /app
 
@@ -37,7 +47,9 @@ ARG SIGNAL_CLI_VERSION=0.13.24
 # Base runtime:
 # - tini: proper PID 1 handling for signal forwarding
 # - curl, wget, ca-certificates: HTTP(S) fetches and health checks
-# - git, python3, make, g++: required for npm install -g (in-app upgrades)
+# - git, make, g++: required for npm install -g (in-app upgrades, native modules)
+# Python is NOT installed via apt — uv owns every Python operation in this
+# image, including providing the interpreter that node-gyp uses.
 # Operator tooling (debugging, SSH, net, files, archives, process inspection):
 # - openssh-client, iputils-ping, netcat-openbsd, dnsutils, rsync
 # - jq, ripgrep, fd-find (exposed as `fd`), tmux, zip, unzip, less, procps
@@ -48,7 +60,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ca-certificates \
     git \
-    python3 \
     make \
     g++ \
     openssh-client \
@@ -68,6 +79,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
+
+# Install uv (Astral's Python package + interpreter manager). uv is the
+# single entry point for every Python operation in this container — we do
+# not `apt install python3`. uv installs a managed CPython under
+# UV_PYTHON_INSTALL_DIR; we symlink it as /usr/local/bin/python{,3} so
+# node-gyp and anything else looking for `python3` on PATH finds it.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python \
+    UV_PYTHON_PREFERENCE=only-managed
+
+RUN uv python install 3.12 \
+    && ln -sf "$(uv python find 3.12)" /usr/local/bin/python3 \
+    && ln -sf /usr/local/bin/python3 /usr/local/bin/python \
+    && python3 --version \
+    && uv --version
 
 # Install GitHub CLI (gh) from the official apt repo
 RUN install -m 0755 -d /etc/apt/keyrings \
