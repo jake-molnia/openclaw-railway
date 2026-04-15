@@ -170,13 +170,17 @@ if [ "$SEEDED_NPM_PREFIX" = "true" ] && [ "$(id -u)" = "0" ]; then
     chown -R openclaw:openclaw "$NPM_PREFIX" 2>/dev/null || true
 fi
 
-# Create symlinks from openclaw home into the persistent volume
-# so $HOME/.openclaw resolves to /data/.openclaw and tool data persists
-ln -sfn "$OPENCLAW_STATE_DIR" /home/openclaw/.openclaw
+# Keep OpenClaw state on /data, but do NOT symlink ~/.openclaw anymore:
+# newer exec-safety checks refuse to traverse a symlinked state path and
+# block shell commands from this environment. Runtime code must rely on
+# OPENCLAW_STATE_DIR=/data/.openclaw instead of assuming ~/.openclaw is the
+# backing store.
+mkdir -p /home/openclaw/.openclaw
 mkdir -p /data/.local /data/.npm
 ln -sfn /data/.local /home/openclaw/.local
 ln -sfn /data/.npm /home/openclaw/.npm
-chown -h openclaw:openclaw /home/openclaw/.openclaw /home/openclaw/.local /home/openclaw/.npm
+chown openclaw:openclaw /home/openclaw/.openclaw
+chown -h openclaw:openclaw /home/openclaw/.local /home/openclaw/.npm
 chown openclaw:openclaw /data/.local /data/.npm
 
 # Sync pre-bundled skills into the skills directory
